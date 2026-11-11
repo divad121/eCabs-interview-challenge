@@ -6,12 +6,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import pl.icwt.ecabs.bookingconsumerservice.entities.Booking;
 import pl.icwt.ecabs.bookingconsumerservice.entities.TripWaypoint;
 import pl.icwt.ecabs.bookingconsumerservice.listeners.BookingsListener;
 import pl.icwt.ecabs.bookingconsumerservice.repositories.BookingsRepository;
+import pl.icwt.ecabs.bookingconsumerservice.repositories.DeletedBookingsRepository;
 import pl.icwt.ecabs.dtos.BookingDTO;
 import pl.icwt.ecabs.dtos.TripWaypointDTO;
 import pl.icwt.ecabs.messages.AddBookingMessage;
@@ -33,6 +35,13 @@ class BookingsIntegrationTest {
 
     @MockitoBean
     private BookingsRepository repository;
+
+    @MockitoBean
+    private DeletedBookingsRepository deletedBookingsRepository;
+
+    // No MongoDB in this test, so the startup index creation is replaced as well.
+    @MockitoBean(name = "deletedBookingsExpiryIndex")
+    private ApplicationRunner deletedBookingsExpiryIndex;
 
     @Test
     public void testAddBookingSuccess() {

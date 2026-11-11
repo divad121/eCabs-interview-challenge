@@ -6,9 +6,9 @@ status, with the commit that fixed it. Deferred items are deliberate; the reason
 
 | Status | Count |
 |---|---|
-| Fixed | 22 |
-| Partly fixed | 2 |
-| Deferred | 4 |
+| Fixed | 24 |
+| Partly fixed | 1 |
+| Deferred | 3 |
 
 ## Critical: loses bookings or takes the platform down
 
@@ -30,18 +30,18 @@ status, with the commit that fixed it. Deferred items are deliberate; the reason
 
 ## High: degrades badly under load, corrupts data or exposes the service
 
-6. **Consumer throughput is fixed regardless of backlog.** Partly fixed in `52e4063`.
+6. **Consumer throughput is fixed regardless of backlog.** Fixed in `52e4063` and `k8s/base/booking-consumer.yaml`.
    - *Impact:* one listener thread per queue and no autoscaling produce the flat ~30 msg/s seen in the surge metrics while the queue climbs.
-   - *Remedy:* 4–8 threads per pod with a bounded prefetch (done). Scaling pods on queue depth with KEDA comes with the Kubernetes manifests.
+   - *Remedy:* 4–8 threads per pod with a bounded prefetch, and KEDA scales pods from 2 to 20 on the depth of the busiest booking queue, holding 8 if it cannot read the depth.
 7. **Every failure dead-letters immediately, with a one-line log.** Fixed in `52e4063`.
    - *Impact:* transient errors were treated as permanent: an edit processed before its add (they travel on separate queues), a database blip or a locking conflict. Each permanently lost a booking change, and the log omitted the queue and the cause.
    - *Remedy:* 5 attempts with exponential backoff, then dead-lettering with at-least-once delivery. The log now shows the queue and full stack trace, without the PII-bearing payload.
 8. **Listener configuration ignored.** Fixed in `189362a` and `6f77d8c`.
    - *Impact:* the custom listener factory bypassed every `spring.rabbitmq.listener.simple.*` property, and `listener.direct.default-requeue-rejected` targeted a container type that wasn't in use. Concurrency, prefetch and retry could not be tuned without a code change.
    - *Remedy:* the factory now applies Boot's configurer, and the property names are corrected.
-9. **No API authentication or rate limiting.** Deferred.
+9. **No API authentication or rate limiting.** Partly fixed in `terraform/edge.tf` and `k8s/base/gateway.yaml`.
    - *Impact:* anyone who can reach the API can create, edit or delete any booking by its ID, and nothing limits a client flooding it.
-   - *Remedy:* validate tokens from eCabs' identity provider at the edge or in the producer, and add per-client rate limiting at the load balancer (Cloud Armor). It's deferred because the identity model belongs to the wider platform, not this service.
+   - *Remedy:* Cloud Armor now limits each client IP at the load balancer and only `/bookings` is routed (done). Authentication, validating tokens from eCabs' identity provider, is deferred because the identity model belongs to the wider platform, not this service.
 10. **Client-supplied price accepted as-is.** Deferred.
     - *Impact:* a client can submit any fare, including €0, and the system stores it.
     - *Remedy:* calculate the price on the server from the tariff, or verify a signed quote. That's business logic outside the scope of a platform exercise.
@@ -66,9 +66,9 @@ status, with the commit that fixed it. Deferred items are deliberate; the reason
 16. **Passenger names written to logs.** Fixed in `4f9b69c`.
     - *Impact:* both services logged passenger names (at debug level). Turning on debug during an incident would ship personal data into log storage, a GDPR exposure.
     - *Remedy:* logs carry booking IDs only.
-17. **No ordering between add, edit and delete for the same booking.** Partly fixed in `52e4063`.
-    - *Impact:* the three events use separate queues and concurrent consumers. A delete processed before its add brings the booking back to life, and an edit can arrive before its add.
-    - *Remedy:* retries absorb edit-before-add, and `@Version` blocks stale overwrites (done). Strict per-booking ordering would need a single queue with consistent-hash partitioning by booking ID; it's listed under future work.
+17. **No ordering between add, edit and delete for the same booking.** Fixed in `52e4063` and `BookingsServiceImpl` (tombstones).
+    - *Impact:* the three events use separate queues and concurrent consumers. A delete processed before its add brought the booking back to life (reproduced locally), and an edit can arrive before its add.
+    - *Remedy:* retries absorb edit-before-add, `@Version` blocks stale overwrites, and a delete leaves a 7-day tombstone that discards any later add or edit. Strict ordering of successive edits would need consistent-hash partitioning by booking ID; it's listed under future work.
 18. **Bean overriding enabled to hide a duplicate `RabbitTemplate`.** Fixed in `52aa6d9`.
     - *Impact:* `allow-bean-definition-overriding` masked a second template. Its private `ObjectMapper` ignored the application's JSON settings (dates were sent as numeric timestamps), and future bean clashes would be hidden silently.
     - *Remedy:* removed the flag and the custom template; Boot's template uses the shared converter.

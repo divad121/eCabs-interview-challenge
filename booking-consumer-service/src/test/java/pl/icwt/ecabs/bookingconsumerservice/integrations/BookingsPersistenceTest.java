@@ -17,17 +17,21 @@ import pl.icwt.ecabs.bookingconsumerservice.configs.ModelMapperConfig;
 import pl.icwt.ecabs.bookingconsumerservice.configs.MongoConfig;
 import pl.icwt.ecabs.bookingconsumerservice.entities.Booking;
 import pl.icwt.ecabs.bookingconsumerservice.repositories.BookingsRepository;
+import pl.icwt.ecabs.bookingconsumerservice.repositories.DeletedBookingsRepository;
 import pl.icwt.ecabs.bookingconsumerservice.services.BookingsService;
 import pl.icwt.ecabs.bookingconsumerservice.services.BookingsServiceImpl;
 import pl.icwt.ecabs.dtos.BookingDTO;
 import pl.icwt.ecabs.dtos.TripWaypointDTO;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 @DataMongoTest
@@ -46,11 +50,15 @@ class BookingsPersistenceTest {
     private BookingsRepository repository;
 
     @Autowired
+    private DeletedBookingsRepository deletedBookingsRepository;
+
+    @Autowired
     private MongoTemplate mongoTemplate;
 
     @BeforeEach
     void cleanUp() {
         repository.deleteAll();
+        deletedBookingsRepository.deleteAll();
     }
 
     @Test
@@ -158,6 +166,48 @@ class BookingsPersistenceTest {
         bookingsService.delBooking(bookingDTO.getBookingId());
 
         Assertions.assertEquals(0, repository.count());
+    }
+
+    @Test
+    void addArrivingAfterDeleteDoesNotResurrectBooking() {
+        BookingDTO bookingDTO = getSimpleBookingDTO();
+
+        bookingsService.delBooking(bookingDTO.getBookingId());
+        bookingsService.addBooking(bookingDTO);
+
+        Assertions.assertEquals(0, repository.count());
+    }
+
+    @Test
+    void editArrivingAfterDeleteIsIgnored() {
+        BookingDTO bookingDTO = getSimpleBookingDTO();
+        bookingsService.addBooking(bookingDTO);
+        bookingsService.delBooking(bookingDTO.getBookingId());
+
+        bookingDTO.setPassengerName("Other Passenger Name");
+        Assertions.assertDoesNotThrow(() -> bookingsService.editBooking(bookingDTO.getBookingId(), bookingDTO));
+
+        Assertions.assertEquals(0, repository.count());
+    }
+
+    @Test
+    void editForUnknownBookingStillFailsSoItIsRetried() {
+        BookingDTO bookingDTO = getSimpleBookingDTO();
+
+        Assertions.assertThrows(NoSuchElementException.class,
+                () -> bookingsService.editBooking(bookingDTO.getBookingId(), bookingDTO));
+    }
+
+    @Test
+    void deletedBookingTombstonesExpireAfterAWeek() {
+        Document expiryIndex = mongoTemplate.getCollection("deleted_bookings").listIndexes().into(new ArrayList<>())
+                .stream()
+                .filter(index -> index.containsKey("expireAfterSeconds"))
+                .findFirst()
+                .orElseThrow();
+
+        Assertions.assertEquals(new Document("deletedOn", 1), expiryIndex.get("key", Document.class));
+        Assertions.assertEquals(Duration.ofDays(7).toSeconds(), expiryIndex.get("expireAfterSeconds", Number.class).longValue());
     }
 
     private BookingDTO getSimpleBookingDTO() {

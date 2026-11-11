@@ -51,7 +51,8 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8080/bookings -ContentType 
   ]}'
 ```
 
-The API answers `202 Accepted` with the generated `bookingId`, and the consumer logs:
+The API answers `202 Accepted` with the generated `bookingId` once RabbitMQ has confirmed it stored the event
+(or `503 Service Unavailable` if it could not, so the client can retry), and the consumer logs:
 
 ```
 ... BookingsServiceImpl : Booking 81876e83-6b40-4a0a-b2ef-9474995a8d09 added
@@ -63,10 +64,17 @@ Interactive API documentation is available locally at <http://localhost:8080/swa
 ### Inspect the data tier
 
 ```bash
-docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers
+docker compose exec rabbitmq rabbitmqctl list_queues name type messages consumers
 docker compose exec mongodb mongosh -u ecabs -p local-dev-only --authenticationDatabase admin ecabs \
   --eval 'db.bookings.find().pretty()'
 ```
+
+Messages that still fail after five attempts (for example an edit of a booking that does not exist) are moved to
+`ecabs.dlq`; the consumer logs the queue and cause. The RabbitMQ management UI is not published to the host; to browse
+it, temporarily add `ports: ["15672:15672"]` to the `rabbitmq` service.
+
+> Upgrading from an earlier checkout: run `docker compose down -v` once. The booking queues are now quorum queues, and
+> RabbitMQ refuses to redeclare an existing classic queue with a different type.
 
 ### Stop
 

@@ -14,6 +14,7 @@ public class AmqpConsts {
 
     public static final String DEAD_LETTER_QUEUE = "ecabs.dlq";
     public static final String DEAD_LETTER_EXCHANGE = "ecabs.dlx";
+    public static final String DEAD_LETTER_ROUTING_KEY = "deadLetter";
 
 
     private AmqpConsts() {

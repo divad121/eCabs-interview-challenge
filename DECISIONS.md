@@ -26,6 +26,22 @@ Every non-obvious choice in this submission, with the reasoning behind it.
 | `pickupTime` offset | Stored as a UTC instant; the original offset is not kept | BSON dates have no offset. The instant is what matters operationally; clients render it in local time. Keeping the offset would need a sub-document. |
 | Persistence tests | Testcontainers with `mongo:8.0` | Verifies mapping against a real MongoDB (same major version as Atlas) instead of mocks; runs anywhere Docker runs, including CI. |
 
+## Messaging
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Topology ownership | Exchanges, queues and bindings defined once in the contract module (`BookingTopology`) and declared by both services | Previously only the consumer declared them, so anything the producer published before the first consumer started was routed nowhere and silently dropped. Declarations are idempotent, so whichever service starts first creates the topology, and a single definition cannot drift between services. |
+| Booking queues | Quorum queues | Raft-replicated across the three broker nodes, so losing a pod or zone loses no accepted booking; classic queues live on one node. |
+| Dead-lettering | Quorum dead-letter queue, `at-least-once` dead-letter strategy | The default dead-lettering is fire-and-forget and can lose the failed message; at-least-once keeps it until the DLQ has confirmed it. |
+| Queue overflow | `reject-publish` overflow (the length limit itself is a broker policy set per environment) | When a queue is full the broker refuses the publish, which reaches the client as a 503 instead of silently dropping the oldest booking. Policies can be tuned without redeploying either service. |
+| Audit queue | Stream with 7-day / 5 GB retention | The original audit queue had no consumer and grew without limit until it exhausted broker memory. A stream is an append-only log: retention is bounded, and any number of future consumers (analytics, replay) can read it from any point without removing messages. |
+| Publisher confirms | Correlated confirms plus mandatory returns; the API answers 202 only after the broker confirms, otherwise 503 | A 202 is a promise that the booking will be processed. Without confirms, a broker failover, a full queue or an unroutable message lost the booking after the client had been told it was accepted. Waiting for the confirm costs a few milliseconds per request. |
+| Consumer retry | 5 attempts with exponential backoff (0.5 s to 4 s), then dead-letter; the error handler logs the queue and full cause, never the payload | Most failures on surge nights are transient: an edit processed before its add (they travel on separate queues), an optimistic-locking conflict, a database blip. The original code dead-lettered all of them on the first failure. Payloads contain passenger PII, so they stay in the DLQ, not in the logs. |
+| Retry location | In-process (blocks the consumer thread for up to ~7.5 s) | Simple, and adequate at this volume because other threads keep consuming. At much higher volume a delayed-retry queue would avoid tying up threads; noted as future work. |
+| Consumer concurrency | 4-8 threads per pod, prefetch 50 | The original single thread with prefetch 1 capped each pod at one round trip at a time. Prefetch is kept moderate so that a pod being scaled in hands back few in-flight messages. Pod-level scaling on queue depth (KEDA) remains the main lever. |
+| Message ordering | Not guaranteed between add, edit and delete for the same booking | Separate queues and concurrent consumers can reorder events. Retry absorbs the common edit-before-add case, and `@Version` stops stale overwrites. Strict per-booking ordering (single active consumer, or consistent-hash partitioning by booking ID) is listed as future work. |
+| Messaging tests | Testcontainers RabbitMQ 4.4 + MongoDB 8.0 | Proves that a real broker accepts the topology (quorum and stream arguments are validated server-side), and exercises the end-to-end flow and the edit-before-add retry. |
+
 ## Containers
 
 | Decision | Choice | Rationale |

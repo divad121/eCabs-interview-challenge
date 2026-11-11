@@ -1,9 +1,12 @@
 package pl.icwt.ecabs.bookingproducerservice;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.amqp.AmqpConnectException;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,6 +20,10 @@ import pl.icwt.ecabs.messages.AddBookingMessage;
 import pl.icwt.ecabs.messages.DelBookingMessage;
 import pl.icwt.ecabs.messages.EditBookingMessage;
 
+import java.net.ConnectException;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
@@ -29,6 +36,20 @@ class BookingIntegrationTests {
 
 	@MockitoBean
 	private RabbitTemplate rabbitTemplate;
+
+	private static final String MINIMAL_BOOKING = "{\"passengerName\": \"TestName\", \"passengerContactNumber\": \"+35699740158\", \"tripWayPoints\": []}";
+
+	@BeforeEach
+	void brokerConfirmsEveryMessage() {
+		brokerConfirms(new CorrelationData.Confirm(true, null));
+	}
+
+	private void brokerConfirms(CorrelationData.Confirm confirm) {
+		Mockito.doAnswer(invocation -> {
+			invocation.<CorrelationData>getArgument(3).getFuture().complete(confirm);
+			return null;
+		}).when(rabbitTemplate).convertAndSend(anyString(), anyString(), any(Object.class), any(CorrelationData.class));
+	}
 
 	@Test
 	void testAddBookingSuccess() throws Exception {
@@ -78,7 +99,7 @@ class BookingIntegrationTests {
 				.andReturn();
 
 		ArgumentCaptor<AddBookingMessage> captor = ArgumentCaptor.forClass(AddBookingMessage.class);
-		Mockito.verify(rabbitTemplate).convertAndSend(eq(AmqpConsts.MESSAGE_EXCHANGE), eq(AmqpConsts.BOOKING_ADD_TOPIC), captor.capture());
+		Mockito.verify(rabbitTemplate).convertAndSend(eq(AmqpConsts.MESSAGE_EXCHANGE), eq(AmqpConsts.BOOKING_ADD_TOPIC), captor.capture(), any(CorrelationData.class));
 
 		AddBookingMessage message = captor.getValue();
 		Assertions.assertEquals("TestName", message.getBooking().getPassengerName());
@@ -142,7 +163,7 @@ class BookingIntegrationTests {
 				.andReturn();
 
 		ArgumentCaptor<EditBookingMessage> captor = ArgumentCaptor.forClass(EditBookingMessage.class);
-		Mockito.verify(rabbitTemplate).convertAndSend(eq(AmqpConsts.MESSAGE_EXCHANGE), eq(AmqpConsts.BOOKING_EDIT_TOPIC), captor.capture());
+		Mockito.verify(rabbitTemplate).convertAndSend(eq(AmqpConsts.MESSAGE_EXCHANGE), eq(AmqpConsts.BOOKING_EDIT_TOPIC), captor.capture(), any(CorrelationData.class));
 
 		EditBookingMessage message = captor.getValue();
 		Assertions.assertEquals("6c53a2fa-776a-4f42-81a6-69b1da0fc120", message.getBookingId().toString());
@@ -159,9 +180,30 @@ class BookingIntegrationTests {
 				.andReturn();
 
 		ArgumentCaptor<DelBookingMessage> captor = ArgumentCaptor.forClass(DelBookingMessage.class);
-		Mockito.verify(rabbitTemplate).convertAndSend(eq(AmqpConsts.MESSAGE_EXCHANGE), eq(AmqpConsts.BOOKING_DEL_TOPIC), captor.capture());
+		Mockito.verify(rabbitTemplate).convertAndSend(eq(AmqpConsts.MESSAGE_EXCHANGE), eq(AmqpConsts.BOOKING_DEL_TOPIC), captor.capture(), any(CorrelationData.class));
 
 		DelBookingMessage message = captor.getValue();
 		Assertions.assertEquals("6c53a2fa-776a-4f42-81a6-69b1da0fc120", message.getBookingId().toString());
+	}
+
+	@Test
+	void testAddBookingRejectedByBrokerReturns503() throws Exception {
+		brokerConfirms(new CorrelationData.Confirm(false, "queue full"));
+
+		mockMvc.perform(post("/bookings")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(MINIMAL_BOOKING))
+				.andExpect(MockMvcResultMatchers.status().isServiceUnavailable());
+	}
+
+	@Test
+	void testAddBookingBrokerUnreachableReturns503() throws Exception {
+		Mockito.doThrow(new AmqpConnectException(new ConnectException("Connection refused")))
+				.when(rabbitTemplate).convertAndSend(anyString(), anyString(), any(Object.class), any(CorrelationData.class));
+
+		mockMvc.perform(post("/bookings")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(MINIMAL_BOOKING))
+				.andExpect(MockMvcResultMatchers.status().isServiceUnavailable());
 	}
 }

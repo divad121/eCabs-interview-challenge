@@ -123,6 +123,8 @@ before images are built.
 * `booking-producer-service` – REST API, request validation, publishes booking events to RabbitMQ.
 * `booking-consumer-service` – RabbitMQ listeners, booking logic and persistence (MongoDB).
 * `booking-contract` – DTOs, messages and AMQP names shared by both services: the communication contract.
+* `terraform/` – the GCP platform (network, GKE Autopilot, IAM, Artifact Registry, Secret Manager, MongoDB Atlas,
+  load-balancer edge). See [terraform/README.md](terraform/README.md) for validate and plan instructions.
 
 ## Assumptions
 

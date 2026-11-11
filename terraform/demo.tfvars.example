@@ -1,0 +1,9 @@
+# Low-cost, short-lived demo environment. Copy to demo.tfvars (git-ignored) and fill in.
+project_id                  = "your-gcp-project-id"
+environment                 = "demo"
+api_domain                  = "api.ecabs.example.dev"
+github_repository           = "your-github-user/your-repo"
+cluster_deletion_protection = false
+
+# No Atlas: the demo's MongoDB connection string is added to Secret Manager by hand (see README).
+enable_atlas = false

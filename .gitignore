@@ -6,6 +6,16 @@ target/
 .env.*
 !.env.example
 
+# Terraform (the provider lock file is committed)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+plan.out
+crash.log
+*_override.tf
+demo.tfvars
+
 # IDE
 .idea/
 *.iml

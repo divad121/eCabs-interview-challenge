@@ -13,6 +13,30 @@ Every non-obvious choice in this submission, with the reasoning behind it.
 | Rejected: CloudAMQP | — | Removes broker operations, but adds a vendor account, private-connectivity work and cost, for a broker the operator already runs well. |
 | Rejected: Pub/Sub | — | The most GCP-native option, but requires rewriting messaging in both services; listed under future work. |
 
+## Infrastructure as code
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Terraform scope | Terraform builds the GCP platform; everything inside the cluster (RabbitMQ, KEDA, the services) is Kubernetes manifests applied by CI | Plan never needs a live cluster, so it works against placeholder projects; app deploys do not run through Terraform, and platform changes do not redeploy apps. |
+| Layout | One root configuration; one tfvars file and one state per environment; one GCP project per environment | Environments cannot drift structurally and share no blast radius; IAM and billing separate cleanly. Modules would add indirection for a two-service system. |
+| State | GCS backend (bucket given at init), versioned bucket, native locking; reviewers plan through a git-ignored local-backend override | The committed configuration is what production runs; reviewers need one documented extra command. |
+| Region | `europe-west1` (Belgium) | Lower-cost EU region with every service used here (Autopilot, Certificate Manager, Atlas `WESTERN_EUROPE`); ~40 ms from Malta is irrelevant for an asynchronous booking API. Data stays in the EU. |
+| Cluster access | Private nodes; control plane reachable only through its DNS endpoint, authorised by IAM; IP endpoint disabled | No public node IPs and no IP allow-lists or bastion to maintain for CI runners with changing addresses; every API call is an authenticated, audited Google identity. |
+| Node identity | Dedicated node service account with `container.defaultNodeServiceAccount` and registry read only | The default Compute Engine account has project Editor; a compromised node would otherwise own the project. |
+| Upgrade window | GKE auto-upgrades only Tuesday-Thursday, 02:00-06:00 UTC | Google must never roll nodes during a Friday-night surge. |
+| CI credentials | Workload Identity Federation for GitHub Actions, restricted to this repository's main branch; deployer has `container.developer` and push rights on one repository | No long-lived JSON key exists to leak; pull requests (including from forks) cannot obtain cloud credentials; the deployer cannot alter cluster configuration or RBAC. |
+| Production database | Atlas M30 replica set (3 nodes, one per zone) with compute auto-scaling up to M50, continuous backup with point-in-time restore | Comfortable for surge-night write rates (~360 bookings/s peak) with headroom; auto-scaling handles growth, not minute-level spikes (the queue absorbs those). |
+| Database connectivity | Private Service Connect (port-mapped architecture), no public access list | The database is unreachable from the internet; one internal IP serves every node. |
+| Database password | Ephemeral random value passed only through write-only arguments to Atlas and Secret Manager | Never stored in Terraform state, plan files or CI logs; rotation is one version bump. |
+| Secret scoping | Secret Manager IAM granted per secret to the one workload identity that needs it | A compromised producer cannot read the database credentials. |
+| RabbitMQ credentials | Generated inside the cluster by the RabbitMQ operators, never in Terraform or Secret Manager | They are only ever used inside the cluster; keeping them there removes a copy to protect. |
+| Public edge | GKE Gateway on a global external Application Load Balancer, Google-managed certificate (DNS-authorised), TLS 1.2+ `MODERN` policy, Cloud Armor | Global anycast load balancing and TLS termination at Google's edge; certificate issued before traffic moves. |
+| Rate limiting | Cloud Armor throttle at 1,200 requests/minute per client IP, answering 429 | Stops a single client flooding the API; set high because many phones share carrier NAT addresses. Should key on client identity once authentication exists. |
+| WAF rules | OWASP SQL-injection and XSS rules in preview (log-only) mode | Enforcing untested rules risks rejecting legitimate bookings on the busiest night; enforce after reviewing the logs. |
+| DNS | Cloudflare records set to DNS-only (not proxied) | Proxying would hide client IPs from Cloud Armor's per-IP limit and double-terminate TLS. |
+| Images | Artifact Registry with immutable tags (commit SHA), keep the 20 newest, delete versions older than 90 days | A tag always identifies exactly one image, so rollbacks are exact; storage cost stays bounded. |
+| Budget alerts | Created manually, not in Terraform | Budget filters need the project number, which Terraform cannot know for a placeholder project without an API call that would break `plan`. |
+
 ## Data
 
 | Decision | Choice | Rationale |

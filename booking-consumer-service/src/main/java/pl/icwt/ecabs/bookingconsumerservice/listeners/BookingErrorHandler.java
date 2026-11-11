@@ -3,7 +3,7 @@ package pl.icwt.ecabs.bookingconsumerservice.listeners;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.rabbit.support.ListenerExecutionFailedException;
+import org.springframework.amqp.listener.ListenerExecutionFailedException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ErrorHandler;
 

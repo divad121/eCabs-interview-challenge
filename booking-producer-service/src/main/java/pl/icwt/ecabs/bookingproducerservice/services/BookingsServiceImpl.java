@@ -44,6 +44,7 @@ public class BookingsServiceImpl implements BookingsService {
 
     @Override
     public BookingDTO editBooking(UUID bookingId, BookingDTO bookingDTO) {
+        bookingDTO.setBookingId(bookingId);
         EditBookingMessage message = new EditBookingMessage();
         message.setBookingId(bookingId);
         message.setBooking(bookingDTO);

@@ -7,11 +7,8 @@ import org.springframework.stereotype.Service;
 import pl.icwt.ecabs.bookingconsumerservice.entities.Booking;
 import pl.icwt.ecabs.bookingconsumerservice.repositories.BookingsRepository;
 import pl.icwt.ecabs.dtos.BookingDTO;
-import pl.icwt.ecabs.dtos.TripWaypointDTO;
 
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -42,10 +39,10 @@ public class BookingsServiceImpl implements BookingsService {
     public void editBooking(final UUID bookingId, final BookingDTO bookingDTO) {
 
         Booking booking = bookingsRepository.findById(bookingId).orElseThrow();
-        List<UUID> activeWaypointsIds = bookingDTO.getTripWayPoints().stream().map(TripWaypointDTO::getTripWayPointId).collect(Collectors.toList());
 
         mapper.map(bookingDTO, booking);
-        booking.getTripWayPoints().removeIf(tripWaypoint -> !activeWaypointsIds.contains(tripWaypoint.getTripWayPointId()));
+        // The message's booking ID is the one addressed by the URL; an ID inside the body must not redirect the write.
+        booking.setBookingId(bookingId);
 
         bookingsRepository.save(booking);
         log.info("Booking {} updated", bookingId);

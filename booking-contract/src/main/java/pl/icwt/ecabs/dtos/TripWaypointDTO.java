@@ -24,5 +24,5 @@ public class TripWaypointDTO {
     @NotNull(message = "Lng can't be null")
     private Double lng;
 
-    private Instant tripWayPointTimestamp;;
+    private Instant tripWayPointTimestamp;
 }

@@ -173,6 +173,38 @@ class BookingIntegrationTests {
 	}
 
 	@Test
+	void testEditBookingPathIdWinsOverBodyId() throws Exception {
+
+		final String payload = "{\"bookingId\": \"11111111-1111-1111-1111-111111111111\", " +
+				"\"passengerName\": \"TestName\", \"passengerContactNumber\": \"+35699740158\", \"tripWayPoints\": []}";
+
+		mockMvc.perform(put("/bookings/6c53a2fa-776a-4f42-81a6-69b1da0fc120")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(payload))
+				.andExpect(MockMvcResultMatchers.status().isAccepted())
+				.andExpect(MockMvcResultMatchers.jsonPath("$.bookingId").value("6c53a2fa-776a-4f42-81a6-69b1da0fc120"));
+
+		ArgumentCaptor<EditBookingMessage> captor = ArgumentCaptor.forClass(EditBookingMessage.class);
+		Mockito.verify(rabbitTemplate).convertAndSend(eq(AmqpConsts.MESSAGE_EXCHANGE), eq(AmqpConsts.BOOKING_EDIT_TOPIC), captor.capture(), any(CorrelationData.class));
+
+		Assertions.assertEquals("6c53a2fa-776a-4f42-81a6-69b1da0fc120", captor.getValue().getBooking().getBookingId().toString());
+	}
+
+	@Test
+	void testAddBookingInvalidWaypointRejected() throws Exception {
+
+		final String payload = "{\"passengerName\": \"TestName\", \"passengerContactNumber\": \"+35699740158\", " +
+				"\"tripWayPoints\": [{\"lastStop\": true, \"locality\": \"\"}]}";
+
+		mockMvc.perform(post("/bookings")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(payload))
+				.andExpect(MockMvcResultMatchers.status().isBadRequest());
+
+		Mockito.verifyNoInteractions(rabbitTemplate);
+	}
+
+	@Test
 	void testDelBookingSuccess() throws Exception {
 
 		mockMvc.perform(delete("/bookings/6c53a2fa-776a-4f42-81a6-69b1da0fc120"))

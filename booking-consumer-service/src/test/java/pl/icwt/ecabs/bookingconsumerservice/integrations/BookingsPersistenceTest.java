@@ -110,6 +110,47 @@ class BookingsPersistenceTest {
     }
 
     @Test
+    void editUpdatesExistingWaypointInPlaceAndFollowsRequestOrder() {
+        BookingDTO bookingDTO = getSimpleBookingDTO();
+        bookingsService.addBooking(bookingDTO);
+        TripWaypointDTO existing = bookingDTO.getTripWayPoints().get(0);
+        Instant storedTimestamp = existing.getTripWayPointTimestamp();
+
+        TripWaypointDTO pickup = new TripWaypointDTO();
+        pickup.setTripWayPointId(UUID.randomUUID());
+        pickup.setLastStop(false);
+        pickup.setLocality("Sliema");
+        pickup.setLat(35.912);
+        pickup.setLng(14.504);
+        existing.setLocality("Mosta");
+        existing.setTripWayPointTimestamp(null);
+        bookingDTO.getTripWayPoints().addFirst(pickup);
+
+        bookingsService.editBooking(bookingDTO.getBookingId(), bookingDTO);
+
+        Booking saved = repository.findById(bookingDTO.getBookingId()).orElseThrow();
+        Assertions.assertEquals(2, saved.getTripWayPoints().size());
+        Assertions.assertEquals(pickup.getTripWayPointId(), saved.getTripWayPoints().get(0).getTripWayPointId());
+        Assertions.assertEquals(existing.getTripWayPointId(), saved.getTripWayPoints().get(1).getTripWayPointId());
+        Assertions.assertEquals("Mosta", saved.getTripWayPoints().get(1).getLocality());
+        Assertions.assertEquals(storedTimestamp, saved.getTripWayPoints().get(1).getTripWayPointTimestamp());
+    }
+
+    @Test
+    void editIgnoresBookingIdInBody() {
+        BookingDTO bookingDTO = getSimpleBookingDTO();
+        bookingsService.addBooking(bookingDTO);
+        UUID addressedId = bookingDTO.getBookingId();
+
+        bookingDTO.setBookingId(UUID.randomUUID());
+        bookingDTO.setPassengerName("Other Passenger Name");
+        bookingsService.editBooking(addressedId, bookingDTO);
+
+        Assertions.assertEquals(1, repository.count());
+        Assertions.assertEquals("Other Passenger Name", repository.findById(addressedId).orElseThrow().getPassengerName());
+    }
+
+    @Test
     void deleteRemovesBooking() {
         BookingDTO bookingDTO = getSimpleBookingDTO();
         bookingsService.addBooking(bookingDTO);

@@ -1,5 +1,6 @@
 package pl.icwt.ecabs.dtos;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -39,5 +40,5 @@ public class BookingDTO {
     @Max(value = 5, message = "Rating must be a number between 1 and 5")
     private Integer rating;
 
-    private List<TripWaypointDTO> tripWayPoints = new ArrayList<>();
+    private List<@Valid TripWaypointDTO> tripWayPoints = new ArrayList<>();
 }

@@ -119,34 +119,39 @@ spec:
       port: 8080
       targetPort: http
 ---
-# The API is stateless; scale on CPU, quickly up and slowly down.
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
+# The API is stateless; scale on CPU, quickly up and slowly down, and pre-scale for the Friday surge window.
+# KEDA manages the underlying HPA, so both services follow the same schedule.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
 metadata:
   name: booking-producer
 spec:
   scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
     name: booking-producer
-  minReplicas: 3
-  maxReplicas: 30
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 60
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 0
-      policies:
-        - type: Percent
-          value: 100
-          periodSeconds: 30
-    scaleDown:
-      stabilizationWindowSeconds: 300
+  minReplicaCount: 3
+  maxReplicaCount: 30
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 30
+        scaleDown:
+          stabilizationWindowSeconds: 300
+  triggers:
+    - type: cron
+      metadata:
+        timezone: Europe/Malta
+        start: "30 21 * * 5"
+        end: "30 2 * * 6"
+        desiredReplicas: "8"
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "60"
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget

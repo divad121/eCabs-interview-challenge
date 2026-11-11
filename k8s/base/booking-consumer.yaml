@@ -177,6 +177,13 @@ spec:
         scaleDown:
           stabilizationWindowSeconds: 300
   triggers:
+    # Friday surge window: capacity is in place before 22:00 instead of waiting for nodes once the queue grows.
+    - type: cron
+      metadata:
+        timezone: Europe/Malta
+        start: "30 21 * * 5"
+        end: "30 2 * * 6"
+        desiredReplicas: "8"
     - type: rabbitmq
       authenticationRef:
         name: rabbitmq-monitoring

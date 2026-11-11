@@ -31,6 +31,11 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    # Local MongoDB and RabbitMQ track the production majors (Atlas 8.0, the cluster's RabbitMQ 4.4); those upgrade
+    # deliberately, together with production.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

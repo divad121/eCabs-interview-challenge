@@ -3,7 +3,12 @@
 A booking API (`booking-producer-service`) accepts ride bookings and publishes events to RabbitMQ; a worker
 (`booking-consumer-service`) consumes them and persists bookings to MongoDB. Prepared to run on Google Cloud (GKE).
 
-Design choices and their rationale are in [DECISIONS.md](DECISIONS.md).
+| Document | Contents |
+|---|---|
+| [FIXES.md](FIXES.md) | Every issue found in the original code, ranked by production risk, with its status |
+| [DECISIONS.md](DECISIONS.md) | Every non-obvious choice with its rationale, and what I would do with another day |
+| [SURGE.md](SURGE.md) | The Friday-night surge: failure chain, first 15 minutes, making next Friday boring |
+| [ADR.md](ADR.md) | Moving booking data from the in-memory H2 into MongoDB Atlas without downtime |
 
 ## Run it locally (one command)
 

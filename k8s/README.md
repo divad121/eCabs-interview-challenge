@@ -52,6 +52,7 @@ created their credential Secrets; this resolves itself within a few minutes.
   into the pod as files that Spring reads as `spring.rabbitmq.username`/`password`. The MongoDB connection string
   is mounted from Secret Manager by the GKE add-on, readable only by the consumer's Workload Identity. After
   rotating it (see `../terraform/README.md`), restart the consumer: `kubectl -n ecabs rollout restart deployment/booking-consumer`.
-- **Scaling**: KEDA scales the consumer on the depth of the busiest booking queue; an HPA scales the producer on CPU.
+- **Scaling**: KEDA scales the consumer on the depth of the busiest booking queue and the producer on CPU; both
+  are pre-scaled to 8 pods every Friday from 21:30 to 02:30 Malta time.
 - **Edge**: the Gateway creates the global load balancer on the reserved IP, with the certificate map, TLS policy and
   Cloud Armor rate limit attached. Only `/bookings` is routed.

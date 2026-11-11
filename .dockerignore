@@ -1,0 +1,14 @@
+# Keep the build context small and free of local artefacts, VCS data and secrets
+**/target/
+.git/
+.github/
+.idea/
+.vscode/
+**/*.iml
+*.md
+terraform/
+k8s/
+**/.env
+**/.env.*
+docker-compose*.yml
+compose*.yml

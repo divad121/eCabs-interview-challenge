@@ -125,6 +125,8 @@ before images are built.
 * `booking-contract` – DTOs, messages and AMQP names shared by both services: the communication contract.
 * `terraform/` – the GCP platform (network, GKE Autopilot, IAM, Artifact Registry, Secret Manager, MongoDB Atlas,
   load-balancer edge). See [terraform/README.md](terraform/README.md) for validate and plan instructions.
+* `k8s/` – everything inside the cluster (RabbitMQ and its topology, both services, autoscaling, Gateway, network
+  policies). See [k8s/README.md](k8s/README.md) for validation and deployment.
 
 ## Assumptions
 

@@ -1,0 +1,102 @@
+# Nothing in the namespace accepts traffic unless a policy below allows it. Only the producer is reachable from
+# the load balancer; the consumer and RabbitMQ accept connections from named in-cluster clients only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: booking-producer
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: booking-producer
+  policyTypes:
+    - Ingress
+  ingress:
+    # Google load balancer proxies and health checkers.
+    - from:
+        - ipBlock:
+            cidr: 35.191.0.0/16
+        - ipBlock:
+            cidr: 130.211.0.0/22
+      ports:
+        - port: 8080
+        - port: 8081
+    # Managed Prometheus scraping.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gmp-system
+      ports:
+        - port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: booking-consumer
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: booking-consumer
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gmp-system
+      ports:
+        - port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  policyTypes:
+    - Ingress
+  ingress:
+    # AMQP from the two services.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: booking-producer
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: booking-consumer
+      ports:
+        - port: 5672
+    # Management API for the operators (topology, users) and for KEDA (queue depth).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rabbitmq-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
+      ports:
+        - port: 15672
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gmp-system
+      ports:
+        - port: 15692
+    # Clustering traffic between broker nodes.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rabbitmq
+---
+# Egress is not restricted here: the consumer reaches Atlas through Private Service Connect and the nodes reach
+# Google APIs; locking egress down is listed as future work.

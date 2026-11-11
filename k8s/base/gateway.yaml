@@ -1,0 +1,106 @@
+# Global external Application Load Balancer. The static IP, certificate map, TLS policy and Cloud Armor policy
+# are created by Terraform (terraform/edge.tf) and referenced here by name.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ecabs-api
+  annotations:
+    networking.gke.io/certmap: ecabs-api
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  addresses:
+    - type: NamedAddress
+      value: ecabs-api
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+apiVersion: networking.gke.io/v1
+kind: GCPGatewayPolicy
+metadata:
+  name: ecabs-api
+spec:
+  default:
+    sslPolicy: ecabs-modern-tls
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ecabs-api
+---
+# Only the booking endpoints are routed; actuator, API docs and anything else stay unreachable from outside.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: booking-api
+spec:
+  parentRefs:
+    - name: ecabs-api
+      sectionName: https
+  hostnames:
+    - api.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /bookings
+      backendRefs:
+        - name: booking-producer
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-to-https
+spec:
+  parentRefs:
+    - name: ecabs-api
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: booking-producer
+spec:
+  default:
+    securityPolicy: ecabs-api
+    timeoutSec: 30
+    connectionDraining:
+      drainingTimeoutSec: 15
+    logging:
+      enabled: true
+      sampleRate: 100000
+  targetRef:
+    group: ""
+    kind: Service
+    name: booking-producer
+---
+# The load balancer only sends traffic to pods that report ready (RabbitMQ reachable).
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: booking-producer
+spec:
+  default:
+    checkIntervalSec: 5
+    timeoutSec: 3
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 8081
+        requestPath: /actuator/health/readiness
+  targetRef:
+    group: ""
+    kind: Service
+    name: booking-producer

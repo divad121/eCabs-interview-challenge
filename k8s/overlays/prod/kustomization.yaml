@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Values come from terraform/prod.tfvars and the Terraform outputs. CI replaces the image tags with the commit SHA
+# (kustomize edit set image) before applying.
+resources:
+  - ../../base
+
+images:
+  - name: booking-producer
+    newName: europe-west1-docker.pkg.dev/ecabs-booking-prod/ecabs/booking-producer
+    newTag: set-by-ci
+  - name: booking-consumer
+    newName: europe-west1-docker.pkg.dev/ecabs-booking-prod/ecabs/booking-consumer
+    newTag: set-by-ci
+
+patches:
+  - target:
+      kind: ServiceAccount
+      name: booking-consumer
+    patch: |
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: booking-consumer@ecabs-booking-prod.iam.gserviceaccount.com
+  - target:
+      kind: SecretProviderClass
+      name: booking-consumer-mongodb
+    patch: |
+      - op: replace
+        path: /spec/parameters/secrets
+        value: |
+          - resourceName: "projects/ecabs-booking-prod/secrets/booking-consumer-mongodb-uri/versions/latest"
+            path: "uri"
+  - target:
+      kind: HTTPRoute
+      name: booking-api
+    patch: |
+      - op: replace
+        path: /spec/hostnames/0
+        value: api.ecabs.example.com

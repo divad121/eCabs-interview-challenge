@@ -1,0 +1,29 @@
+# Google Managed Service for Prometheus scrapes these targets: request latency and errors (producer), listener
+# throughput (consumer) and per-queue depth and publish/deliver rates (RabbitMQ), the signals behind SURGE.md.
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: booking-services
+spec:
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [booking-producer, booking-consumer]
+  endpoints:
+    - port: management
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: rabbitmq
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  endpoints:
+    - port: prometheus
+      path: /metrics/per-object
+      interval: 30s

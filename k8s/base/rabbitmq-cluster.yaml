@@ -1,0 +1,40 @@
+# Three-node broker, one node per zone, so quorum queues survive the loss of a pod or a whole zone.
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rabbitmq
+spec:
+  replicas: 3
+  image: rabbitmq:4.4-management
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  persistence:
+    storageClassName: standard-rwo
+    storage: 20Gi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: topology.kubernetes.io/zone
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: rabbitmq
+  rabbitmq:
+    additionalConfig: |
+      # Block publishers before the node runs out of memory; publishers then get 503s instead of a broker crash.
+      vm_memory_high_watermark.relative = 0.6
+      disk_free_limit.absolute = 2GB
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rabbitmq
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq

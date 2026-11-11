@@ -1,0 +1,200 @@
+# Broker topology, owned by the platform in production. Must match BookingTopology in booking-contract, which the
+# services declare themselves only in local and test environments (spring.rabbitmq.dynamic=false here).
+# Queues are retained if their resource is deleted, so a manifest mistake cannot discard pending bookings.
+apiVersion: rabbitmq.com/v1beta1
+kind: Exchange
+metadata:
+  name: message
+spec:
+  name: ecabs.message.x
+  type: fanout
+  durable: true
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Exchange
+metadata:
+  name: booking
+spec:
+  name: ecabs.booking.x
+  type: topic
+  durable: true
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Exchange
+metadata:
+  name: dead-letter
+spec:
+  name: ecabs.dlx
+  type: direct
+  durable: true
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: audit
+spec:
+  name: ecabs.messageaudit.q
+  type: stream
+  durable: true
+  deletionPolicy: retain
+  arguments:
+    x-max-age: 7D
+    x-max-length-bytes: 5000000000
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: booking-add
+spec:
+  name: ecabs.bookingadd.q
+  type: quorum
+  durable: true
+  deletionPolicy: retain
+  arguments:
+    x-dead-letter-exchange: ecabs.dlx
+    x-dead-letter-routing-key: deadLetter
+    x-dead-letter-strategy: at-least-once
+    x-overflow: reject-publish
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: booking-edit
+spec:
+  name: ecabs.bookingedit.q
+  type: quorum
+  durable: true
+  deletionPolicy: retain
+  arguments:
+    x-dead-letter-exchange: ecabs.dlx
+    x-dead-letter-routing-key: deadLetter
+    x-dead-letter-strategy: at-least-once
+    x-overflow: reject-publish
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: booking-del
+spec:
+  name: ecabs.bookingdel.q
+  type: quorum
+  durable: true
+  deletionPolicy: retain
+  arguments:
+    x-dead-letter-exchange: ecabs.dlx
+    x-dead-letter-routing-key: deadLetter
+    x-dead-letter-strategy: at-least-once
+    x-overflow: reject-publish
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: dead-letter
+spec:
+  name: ecabs.dlq
+  type: quorum
+  durable: true
+  deletionPolicy: retain
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: message-to-audit
+spec:
+  source: ecabs.message.x
+  destination: ecabs.messageaudit.q
+  destinationType: queue
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: message-to-booking
+spec:
+  source: ecabs.message.x
+  destination: ecabs.booking.x
+  destinationType: exchange
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: booking-add
+spec:
+  source: ecabs.booking.x
+  destination: ecabs.bookingadd.q
+  destinationType: queue
+  routingKey: booking.add
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: booking-edit
+spec:
+  source: ecabs.booking.x
+  destination: ecabs.bookingedit.q
+  destinationType: queue
+  routingKey: booking.edit
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: booking-del
+spec:
+  source: ecabs.booking.x
+  destination: ecabs.bookingdel.q
+  destinationType: queue
+  routingKey: booking.del
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: dead-letter
+spec:
+  source: ecabs.dlx
+  destination: ecabs.dlq
+  destinationType: queue
+  routingKey: deadLetter
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+# Bounds each booking queue. With reject-publish overflow, a full queue refuses new bookings (the API returns 503)
+# instead of exhausting broker memory or disk. 1M messages is about 45 minutes of peak surge traffic with no
+# consumers at all, well within the 20 Gi volumes.
+apiVersion: rabbitmq.com/v1beta1
+kind: Policy
+metadata:
+  name: booking-queue-limits
+spec:
+  name: booking-queue-limits
+  pattern: ^ecabs\.booking(add|edit|del)\.q$
+  applyTo: quorum_queues
+  priority: 10
+  definition:
+    max-length: 1000000
+  rabbitmqClusterReference:
+    name: rabbitmq

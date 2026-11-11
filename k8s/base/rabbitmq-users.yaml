@@ -1,0 +1,77 @@
+# One RabbitMQ user per client, each limited to exactly what it does. The topology operator generates the
+# passwords into <name>-user-credentials Secrets; they never leave the cluster.
+# Passive declarations (used by listeners to check that queues exist) need no permissions.
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: booking-producer
+spec:
+  usernameFromMeta: true
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: booking-producer
+spec:
+  vhost: /
+  userReference:
+    name: booking-producer
+  permissions:
+    configure: ^$
+    write: ^ecabs\.message\.x$
+    read: ^$
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: booking-consumer
+spec:
+  usernameFromMeta: true
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: booking-consumer
+spec:
+  vhost: /
+  userReference:
+    name: booking-consumer
+  permissions:
+    configure: ^$
+    write: ^$
+    read: ^ecabs\.booking(add|edit|del)\.q$
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+# KEDA reads queue depth through the management API: monitoring tag, no access to messages.
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: keda
+spec:
+  usernameFromMeta: true
+  tags:
+    - monitoring
+  rabbitmqClusterReference:
+    name: rabbitmq
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: keda
+spec:
+  vhost: /
+  userReference:
+    name: keda
+  permissions:
+    configure: ^$
+    write: ^$
+    read: ^$
+  rabbitmqClusterReference:
+    name: rabbitmq

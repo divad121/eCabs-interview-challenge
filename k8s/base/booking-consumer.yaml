@@ -1,0 +1,206 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: booking-consumer
+  annotations:
+    # Workload Identity: acts as the Google service account that may read the MongoDB secret (set per overlay).
+    iam.gke.io/gcp-service-account: booking-consumer@PROJECT_ID.iam.gserviceaccount.com
+automountServiceAccountToken: false
+---
+# The GKE Secret Manager add-on mounts the connection string as /etc/ecabs/secrets/spring/mongodb/uri,
+# read with the pod's own Workload Identity, so only this workload can obtain it.
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: booking-consumer-mongodb
+spec:
+  provider: gke
+  parameters:
+    secrets: |
+      - resourceName: "projects/PROJECT_ID/secrets/booking-consumer-mongodb-uri/versions/latest"
+        path: "uri"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-consumer
+  labels:
+    app.kubernetes.io/name: booking-consumer
+spec:
+  # Replicas are managed by KEDA (ScaledObject below).
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: booking-consumer
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: booking-consumer
+    spec:
+      serviceAccountName: booking-consumer
+      # Spring stops the listeners, finishes in-flight messages, and unacknowledged ones return to the queue.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: booking-consumer
+      containers:
+        - name: booking-consumer
+          image: booking-consumer
+          ports:
+            - name: management
+              containerPort: 8081
+          env:
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            # The platform owns the broker topology in production; the consumer may only read its queues.
+            - name: SPRING_RABBITMQ_DYNAMIC
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: rabbitmq-credentials
+              mountPath: /etc/ecabs/secrets/spring/rabbitmq
+              readOnly: true
+            - name: mongodb-credentials
+              mountPath: /etc/ecabs/secrets/spring/mongodb
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: rabbitmq-credentials
+          secret:
+            secretName: booking-consumer-user-credentials
+            items:
+              - key: username
+                path: username
+              - key: password
+                path: password
+        - name: mongodb-credentials
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: booking-consumer-mongodb
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: booking-consumer
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: booking-consumer
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rabbitmq-monitoring
+spec:
+  secretTargetRef:
+    - parameter: username
+      name: keda-user-credentials
+      key: username
+    - parameter: password
+      name: keda-user-credentials
+      key: password
+---
+# Scales consumers on backlog, not CPU: the surge shows up as queue depth long before CPU moves.
+# Each replica is sized for about 500 waiting messages per queue; KEDA follows the busiest queue.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: booking-consumer
+spec:
+  scaleTargetRef:
+    name: booking-consumer
+  minReplicaCount: 2
+  # Upper bound protects the database; raise it together with the Atlas tier.
+  maxReplicaCount: 20
+  pollingInterval: 15
+  cooldownPeriod: 300
+  # If queue depth cannot be read, hold a safe surge-capable size rather than scaling to the minimum.
+  fallback:
+    failureThreshold: 3
+    replicas: 8
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 30
+        scaleDown:
+          stabilizationWindowSeconds: 300
+  triggers:
+    - type: rabbitmq
+      authenticationRef:
+        name: rabbitmq-monitoring
+      metadata:
+        host: http://rabbitmq.ecabs.svc.cluster.local:15672/
+        protocol: http
+        queueName: ecabs.bookingadd.q
+        mode: QueueLength
+        value: "500"
+    - type: rabbitmq
+      authenticationRef:
+        name: rabbitmq-monitoring
+      metadata:
+        host: http://rabbitmq.ecabs.svc.cluster.local:15672/
+        protocol: http
+        queueName: ecabs.bookingedit.q
+        mode: QueueLength
+        value: "500"
+    - type: rabbitmq
+      authenticationRef:
+        name: rabbitmq-monitoring
+      metadata:
+        host: http://rabbitmq.ecabs.svc.cluster.local:15672/
+        protocol: http
+        queueName: ecabs.bookingdel.q
+        mode: QueueLength
+        value: "500"

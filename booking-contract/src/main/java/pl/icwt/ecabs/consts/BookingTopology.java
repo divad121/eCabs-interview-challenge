@@ -13,6 +13,9 @@ import org.springframework.amqp.core.TopicExchange;
  * The RabbitMQ topology shared by producer and consumer. Both services declare it on startup, so whichever starts
  * first creates it and no message is published into a missing exchange or queue. Declarations are idempotent but
  * must stay identical in both services: RabbitMQ rejects a redeclaration with different arguments.
+ * <p>
+ * In Kubernetes the services do not declare anything ({@code spring.rabbitmq.dynamic=false}); the same topology is
+ * created by the platform from {@code k8s/base/rabbitmq-topology.yaml}, which must be kept identical to this class.
  */
 public final class BookingTopology {
 

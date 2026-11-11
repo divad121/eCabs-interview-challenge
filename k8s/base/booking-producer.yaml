@@ -1,0 +1,159 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: booking-producer
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-producer
+  labels:
+    app.kubernetes.io/name: booking-producer
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: booking-producer
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: booking-producer
+    spec:
+      serviceAccountName: booking-producer
+      automountServiceAccountToken: false
+      # preStop sleep (10s) lets the load balancer stop routing before Spring's graceful shutdown (up to 30s).
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: booking-producer
+      containers:
+        - name: booking-producer
+          image: booking-producer
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 8081
+          env:
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            # The platform owns the broker topology in production; the producer may only publish.
+            - name: SPRING_RABBITMQ_DYNAMIC
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: rabbitmq-credentials
+              mountPath: /etc/ecabs/secrets/spring/rabbitmq
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: rabbitmq-credentials
+          secret:
+            secretName: booking-producer-user-credentials
+            items:
+              - key: username
+                path: username
+              - key: password
+                path: password
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-producer
+  labels:
+    app.kubernetes.io/name: booking-producer
+spec:
+  selector:
+    app.kubernetes.io/name: booking-producer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# The API is stateless; scale on CPU, quickly up and slowly down.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: booking-producer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: booking-producer
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: booking-producer
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: booking-producer

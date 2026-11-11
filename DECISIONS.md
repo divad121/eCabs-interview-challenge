@@ -26,6 +26,30 @@ Every non-obvious choice in this submission, with the reasoning behind it.
 | `pickupTime` offset | Stored as a UTC instant; the original offset is not kept | BSON dates have no offset. The instant is what matters operationally; clients render it in local time. Keeping the offset would need a sub-document. |
 | Persistence tests | Testcontainers with `mongo:8.0` | Verifies mapping against a real MongoDB (same major version as Atlas) instead of mocks; runs anywhere Docker runs, including CI. |
 
+## Containers
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Dockerfile layout | One Dockerfile per service, built from the repository root | Both services depend on the `booking-contract` module, so the build needs the reactor (`-pl <service> -am`); each image copies only its own and the contract's sources, so a change to one service does not invalidate the other's cache. |
+| Runtime base image | `gcr.io/distroless/java21-debian13:nonroot` | No shell or package manager: far fewer CVEs and nothing for an attacker to work with; non-root user built in. Debugging uses `kubectl debug` ephemeral containers instead of a shell in the image. |
+| Build base image | `eclipse-temurin:21-jdk-noble` | Standard, well-maintained OpenJDK build; only used in the build stage, never shipped. |
+| Image pinning | Base images pinned by digest | Reproducible builds; nothing changes underneath a tag between CI runs. Dependabot keeps the digests current. |
+| Layering | Spring Boot layered-jar extraction (`-Djarmode=tools extract --layers`) | Dependencies (~38 MB) sit in a cached layer; a code change ships a ~25 KB layer, which makes pushes and node pulls fast during scale-out. |
+| Tests in image build | Skipped (`-DskipTests`); CI runs the full test suite before building images | Testcontainers cannot run inside `docker build`, and testing once in CI avoids duplicate work. |
+| JVM memory | `-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError` via `JAVA_TOOL_OPTIONS` | Heap derives from the container limit, leaving headroom for metaspace, threads and buffers, so the JVM garbage-collects before the kernel OOM-kills it; if the heap is exhausted, the process exits immediately and is restarted cleanly instead of limping. Overridable without a rebuild. |
+| Process model | Exec-form `ENTRYPOINT`, Java as PID 1 | SIGTERM reaches the JVM directly, so Spring's graceful shutdown drains in-flight requests and messages during rollouts. |
+
+## Local environment
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Orchestration | Docker Compose, `docker compose up --build` | One command, no tooling beyond Docker; builds the same images that ship to production. |
+| Network isolation | RabbitMQ, MongoDB and the consumer on an `internal` network; only the producer joins the published `frontend` network | Mirrors production: the data tier and worker are unreachable from outside, and the internal network also has no outbound route. |
+| Local credentials | Throwaway defaults in `docker-compose.yml`, overridable via a git-ignored `.env` | Keeps the reviewer's run to one command; these values protect nothing and never reach production, where secrets come from Secret Manager. |
+| Secret delivery locally | Environment variables (production uses mounted files) | The apps accept both; files would need extra local setup for no security gain on a developer machine. |
+| Memory limits | `mem_limit: 512m` per service | The JVM sizes its heap from the limit exactly as it will in Kubernetes, so memory problems surface locally first. |
+| RabbitMQ user | Runs as the image's unprivileged `rabbitmq` user | Least privilege; also prevents healthcheck CLI calls from creating a root-owned Erlang cookie that would stop the broker from starting. |
+
 ## Configuration and operability
 
 | Decision | Choice | Rationale |

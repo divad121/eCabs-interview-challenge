@@ -30,10 +30,9 @@ public class BookingsServiceImpl implements BookingsService {
 
         Booking booking = mapper.map(bookingDTO, Booking.class);
 
-        log.debug("Saving {}", booking.getBookingId());
-
         try {
             bookingsRepository.save(booking);
+            log.info("Booking {} added", booking.getBookingId());
         } catch (DuplicateKeyException e) {
             log.info("Booking {} already exists, ignoring redelivered add", booking.getBookingId());
         }
@@ -48,15 +47,14 @@ public class BookingsServiceImpl implements BookingsService {
         mapper.map(bookingDTO, booking);
         booking.getTripWayPoints().removeIf(tripWaypoint -> !activeWaypointsIds.contains(tripWaypoint.getTripWayPointId()));
 
-        log.debug("Updating booking {}", booking.getBookingId());
-
         bookingsRepository.save(booking);
+        log.info("Booking {} updated", bookingId);
     }
 
     @Override
     public void delBooking(final UUID bookingId) {
 
-        log.debug("Removing booking {}", bookingId);
         bookingsRepository.deleteByBookingId(bookingId);
+        log.info("Booking {} deleted", bookingId);
     }
 }

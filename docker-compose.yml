@@ -1,0 +1,93 @@
+# One-command local environment:  docker compose up --build
+# Only the producer API (http://localhost:8080) is published. RabbitMQ, MongoDB and the consumer live on an
+# internal network with no published ports and no outbound access.
+#
+# Credentials below are throwaway defaults for local use only; override them via environment variables or a
+# git-ignored .env file (see .env.example). Production secrets come from Secret Manager, never from this file.
+
+name: ecabs
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.4-management
+    # Run as the image's unprivileged user; also keeps healthcheck CLI calls from creating a root-owned Erlang cookie
+    user: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-ecabs}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local-dev-only}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  mongodb:
+    image: mongo:8.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:-ecabs}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-local-dev-only}
+    volumes:
+      - mongodb-data:/data/db
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  booking-consumer:
+    build:
+      context: .
+      dockerfile: booking-consumer-service/Dockerfile
+    image: booking-consumer-service:local
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-ecabs}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-local-dev-only}
+      SPRING_MONGODB_URI: mongodb://${MONGODB_USERNAME:-ecabs}:${MONGODB_PASSWORD:-local-dev-only}@mongodb:27017/ecabs?authSource=admin
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks: [backend]
+    # Same memory limit as in Kubernetes, so the JVM heap is sized exactly as it will be in production
+    mem_limit: 512m
+    restart: unless-stopped
+
+  booking-producer:
+    build:
+      context: .
+      dockerfile: booking-producer-service/Dockerfile
+    image: booking-producer-service:local
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-ecabs}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-local-dev-only}
+      SPRINGDOC_API_DOCS_ENABLED: "true"
+      SPRINGDOC_SWAGGER_UI_ENABLED: "true"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      booking-consumer:
+        condition: service_started
+    networks: [frontend, backend]
+    ports:
+      - "8080:8080"
+    mem_limit: 512m
+    restart: unless-stopped
+
+networks:
+  # Internal: no published ports and no route out of the host for the data tier
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  rabbitmq-data:
+  mongodb-data:

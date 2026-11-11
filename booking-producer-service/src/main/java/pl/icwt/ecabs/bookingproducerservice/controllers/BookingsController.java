@@ -38,8 +38,8 @@ public class BookingsController {
     public ResponseEntity<BookingDTO> addBooking(
             @Validated @RequestBody BookingDTO bookingDTO) {
 
-        log.debug("Received add booking request for passenger {}", bookingDTO.getPassengerName());
         BookingDTO responseDTO = bookingsService.addBooking(bookingDTO);
+        log.info("Booking {} accepted", responseDTO.getBookingId());
 
         return ResponseEntity.accepted().body(responseDTO);
     }

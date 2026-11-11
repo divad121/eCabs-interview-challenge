@@ -21,14 +21,14 @@ public class BookingsListener {
 
     @RabbitListener(queues = AmqpConsts.BOOKING_ADD_QUEUE)
     public void receiveAdd(final AddBookingMessage message) {
-        log.debug("Received add: {}", message.getBooking().getPassengerName());
+        log.debug("Received add for booking {}", message.getBooking().getBookingId());
 
         bookingsService.addBooking(message.getBooking());
     }
 
     @RabbitListener(queues = AmqpConsts.BOOKING_EDIT_QUEUE)
     public void receiveEdit(final EditBookingMessage message) {
-        log.debug("Received edit: {}", message.getBooking().getPassengerName());
+        log.debug("Received edit for booking {}", message.getBookingId());
 
         bookingsService.editBooking(message.getBookingId(), message.getBooking());
     }

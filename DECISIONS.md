@@ -19,6 +19,12 @@ Every non-obvious choice in this submission, with the reasoning behind it.
 |---|---|---|
 | Production datastore | MongoDB Atlas (on GCP), Spring Data MongoDB in the consumer | Matches the eCabs production stack; a booking with embedded waypoints maps naturally to a single document. In-memory H2 loses all data on restart and cannot be shared between replicas. |
 | Rejected: Cloud SQL (Postgres) | — | Smallest code change (JPA stays), but diverges from the platform eCabs actually operates. |
+| Document shape | One `bookings` document per booking, waypoints embedded | Waypoints are never read without their booking; embedding makes every add/edit/delete a single-document write, which MongoDB applies atomically, so no multi-document transactions (and no `@Transactional`) are needed. |
+| Concurrency | `@Version` optimistic locking | Several consumer replicas may process edits for the same booking; a stale write fails instead of silently overwriting. A null version also marks new documents, so `@CreatedDate` works with client-assigned UUIDs. |
+| Redelivered "add" | Duplicate key is logged and ignored | RabbitMQ is at-least-once; re-processing an add must be idempotent rather than dead-lettered. |
+| Storage types | UUID as standard binary (subtype 4), `price` as Decimal128, `pickupTime` as BSON date | Native, queryable, language-neutral types. Set in code (not properties) because they define the data format, not the environment. |
+| `pickupTime` offset | Stored as a UTC instant; the original offset is not kept | BSON dates have no offset. The instant is what matters operationally; clients render it in local time. Keeping the offset would need a sub-document. |
+| Persistence tests | Testcontainers with `mongo:8.0` | Verifies mapping against a real MongoDB (same major version as Atlas) instead of mocks; runs anywhere Docker runs, including CI. |
 
 ## Application stack
 

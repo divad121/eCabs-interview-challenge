@@ -5,6 +5,7 @@ import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFacto
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.boot.amqp.autoconfigure.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import pl.icwt.ecabs.bookingconsumerservice.listeners.BookingErrorHandler;
@@ -57,13 +58,12 @@ public class AmqpConfig {
     }
 
     @Bean
-    SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(final ConnectionFactory connectionFactory,
-                                                                        final MessageConverter messageConverter,
+    SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(final SimpleRabbitListenerContainerFactoryConfigurer configurer,
+                                                                        final ConnectionFactory connectionFactory,
                                                                         final BookingErrorHandler errorHandler) {
+        // The configurer applies spring.rabbitmq.listener.simple.* (concurrency, prefetch, ...) and the MessageConverter bean.
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-        factory.setConnectionFactory(connectionFactory);
-        factory.setMessageConverter(messageConverter);
-        factory.setAcknowledgeMode(AcknowledgeMode.AUTO);
+        configurer.configure(factory, connectionFactory);
         factory.setErrorHandler(errorHandler);
 
         return factory;

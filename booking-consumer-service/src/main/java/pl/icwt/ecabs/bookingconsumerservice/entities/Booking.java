@@ -1,11 +1,13 @@
 package pl.icwt.ecabs.bookingconsumerservice.entities;
 
-import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,7 +19,7 @@ import java.util.UUID;
 @Setter
 @Getter
 @NoArgsConstructor
-@Entity
+@Document("bookings")
 public class Booking {
 
     @Id
@@ -31,12 +33,16 @@ public class Booking {
     private BigDecimal price;
     private Integer rating;
 
-    @CreationTimestamp
+    // Optimistic locking between consumer replicas; a null version also marks the document as new,
+    // which is what lets @CreatedDate work with client-assigned ids.
+    @Version
+    private Long version;
+
+    @CreatedDate
     private Instant createdOn;
 
-    @UpdateTimestamp
+    @LastModifiedDate
     private Instant lastModifiedOn;
 
-    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<TripWaypoint> tripWayPoints = new ArrayList<>();
 }

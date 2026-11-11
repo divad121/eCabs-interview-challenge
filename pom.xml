@@ -26,6 +26,8 @@
         <java.version>21</java.version>
         <modelmapper.version>3.2.8</modelmapper.version>
         <springdoc.version>3.2.0</springdoc.version>
+        <!-- Overrides Boot 4.1.2's 5.30.0 (CVE-2026-63337, -69219, -69220, -75516); remove once Boot manages >= 5.34 -->
+        <rabbit-amqp-client.version>5.37.1</rabbit-amqp-client.version>
     </properties>
 
     <dependencyManagement>

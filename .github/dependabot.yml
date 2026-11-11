@@ -1,0 +1,50 @@
+# Weekly update pull requests for every pinned dependency; CI must pass (including the image scan) before merging.
+# The cooldown skips releases younger than a week, so a compromised release is usually caught before it is offered.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Base images are pinned by digest; this keeps the digests (and their OS patches) current.
+  - package-ecosystem: docker
+    directories:
+      - /booking-producer-service
+      - /booking-consumer-service
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      base-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directory: /terraform
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

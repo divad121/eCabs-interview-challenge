@@ -26,7 +26,7 @@ status, with the commit that fixed it. Deferred items are deliberate; the reason
    - *Remedy:* removed all credentials from the code. Settings come from environment variables, and secrets from files mounted from Secret Manager. Anything ever committed must be treated as burned.
 5. **End-of-life stack with known vulnerabilities.** Fixed in `52aa6d9`.
    - *Impact:* Spring Boot 2.3 has been out of support since 2021, Jackson 2.11.1 was pinned by hand (several deserialisation CVEs) and springdoc 1.2 and ModelMapper 2.3 were outdated, with no security patches.
-   - *Remedy:* upgraded to Spring Boot 4.1 and Java 21 with Boot-managed versions. Dependabot will keep it current (added with CI).
+   - *Remedy:* upgraded to Spring Boot 4.1 and Java 21 with Boot-managed versions. Dependabot keeps it current, and CI blocks any image with a fixable HIGH or CRITICAL vulnerability.
 
 ## High: degrades badly under load, corrupts data or exposes the service
 

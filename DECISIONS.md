@@ -97,6 +97,21 @@ Every non-obvious choice in this submission, with the reasoning behind it.
 | JVM memory | `-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError` via `JAVA_TOOL_OPTIONS` | Heap derives from the container limit, leaving headroom for metaspace, threads and buffers, so the JVM garbage-collects before the kernel OOM-kills it; if the heap is exhausted, the process exits immediately and is restarted cleanly instead of limping. Overridable without a rebuild. |
 | Process model | Exec-form `ENTRYPOINT`, Java as PID 1 | SIGTERM reaches the JVM directly, so Spring's graceful shutdown drains in-flight requests and messages during rollouts. |
 
+## CI/CD
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Pipeline | GitHub Actions, one workflow: build and test, Terraform, Kubernetes validation and security scans in parallel; images after tests; deploy only after everything passes | The code already lives on GitHub; every pull request gets the same checks that gate production. |
+| Tests in CI | Full `./mvnw verify`, including Testcontainers against real RabbitMQ and MongoDB | GitHub's runners include Docker, so the broker topology and database mapping are tested for real, not mocked. |
+| Terraform in CI | `fmt`, `validate` and `plan` for both environments against local state with a placeholder token | Proves on every change that the configuration plans cleanly, exactly as reviewers run it, without cloud credentials in pull requests. |
+| Image gate | Trivy scan of each built image; fails on HIGH/CRITICAL vulnerabilities that have a fix; the scanned image is the one pushed | Catches vulnerable libraries before they ship: running the same scan before adding it found four HIGH CVEs in the RabbitMQ client bundled by Spring Boot. Unfixable findings are not blocked, since nothing could resolve them. |
+| Image tags | Commit SHA only, never `latest` | Matches the registry's immutable tags; a running pod always maps to one commit and one scan result. |
+| Action pinning | Every third-party action pinned to a full commit SHA, version in a comment; Dependabot updates them | A tag can be moved to malicious code, a commit SHA cannot. |
+| Dependency updates | Dependabot weekly for Maven, base-image digests, Compose images, Actions and Terraform providers, with a 7-day cooldown | Patches arrive as reviewed, tested pull requests; the cooldown avoids adopting a compromised release in its first days. |
+| Deploy trigger | Every merge to `main`, behind a `production` GitHub environment, skipped while the project variables are unset | Small, frequent deploys are easier to roll back; the environment can add a manual approval; forks and fresh clones still run green. |
+| Deploy method | `kustomize edit set image` to the commit SHA, server-side apply, then wait for both rollouts | The job fails visibly if new pods never become ready, while the old ReplicaSet keeps serving (`maxUnavailable: 0`). |
+| Rejected: Cloud Build | — | Equally capable, but splits the pipeline from the pull requests that reviewers read, and would need its own GitHub connection. |
+
 ## Local environment
 
 | Decision | Choice | Rationale |
@@ -125,3 +140,4 @@ Every non-obvious choice in this submission, with the reasoning behind it.
 |---|---|---|
 | Framework | Spring Boot 4.1.x | Boot 2.3 has been out of OSS support since 2021 and pulls in libraries with known CVEs. 4.1 is the newest line with OSS support (until July 2027); 3.5 and 4.0 lose or have lost it in 2026. |
 | Java | 21 (LTS) | Long-term support release with mature container support and widely available base images. |
+| RabbitMQ Java client | Overridden to 5.37.1 (Boot 4.1.2 manages 5.30.0) | 5.30.0 has four HIGH CVEs, fixed in 5.33-5.34; same major line, so Spring AMQP is unaffected. The override comes out once Boot manages a fixed version. |

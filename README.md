@@ -118,6 +118,34 @@ Images are built from the repository root because both services depend on the sh
 The Dockerfiles are multi-stage (JDK build stage, distroless non-root Java 21 runtime) and skip tests, which run in CI
 before images are built.
 
+## CI/CD
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and every push to `main`:
+
+| Job | What it does |
+|---|---|
+| Build and test | `./mvnw verify`: all modules, including the Testcontainers suites against real RabbitMQ and MongoDB |
+| Terraform | `fmt -check`, `validate`, and `plan` for both `prod.tfvars` and `demo.tfvars.example` (local state, no credentials) |
+| Kubernetes manifests | `k8s/validate.sh`: renders every overlay and validates it strictly against the pinned CRDs |
+| Secret and configuration scan | gitleaks on the commits; Trivy on the Dockerfiles, Terraform and manifests (fails on HIGH/CRITICAL) |
+| Image (one per service) | builds the image and scans it with Trivy, failing on fixable HIGH/CRITICAL vulnerabilities; on `main`, pushes it to Artifact Registry tagged with the commit SHA |
+| Deploy to GKE | on `main`, after every other job passes: pins the overlay to the new images, applies it and waits for the rollout |
+
+Pushing and deploying are switched on by repository variables taken from the Terraform outputs; until they are set,
+those steps are skipped and everything else still runs:
+
+| Variable | Value |
+|---|---|
+| `GCP_PROJECT_ID` | the project ID |
+| `GCP_REGION` | optional, defaults to `europe-west1` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | output `github_workload_identity_provider` |
+| `GCP_CI_SERVICE_ACCOUNT` | output `ci_service_account` |
+| `K8S_OVERLAY` | optional, defaults to `prod` |
+
+CI authenticates to Google with short-lived Workload Identity Federation tokens, accepted only from this
+repository's `main` branch; no service-account key exists. [Dependabot](.github/dependabot.yml) opens weekly
+update pull requests for Maven, base images, Compose images, GitHub Actions and Terraform providers.
+
 ## Modules
 
 * `booking-producer-service` – REST API, request validation, publishes booking events to RabbitMQ.

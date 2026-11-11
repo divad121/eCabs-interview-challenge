@@ -26,6 +26,17 @@ Every non-obvious choice in this submission, with the reasoning behind it.
 | `pickupTime` offset | Stored as a UTC instant; the original offset is not kept | BSON dates have no offset. The instant is what matters operationally; clients render it in local time. Keeping the offset would need a sub-document. |
 | Persistence tests | Testcontainers with `mongo:8.0` | Verifies mapping against a real MongoDB (same major version as Atlas) instead of mocks; runs anywhere Docker runs, including CI. |
 
+## Configuration and operability
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Configuration source | Spring's standard environment variables (`SPRING_RABBITMQ_HOST`, `SPRING_MONGODB_URI`, ...) plus an optional `configtree` at `/etc/ecabs/secrets/` | No custom indirection layer to document; any property is overridable without rebuilding. Property files hold only credential-less local defaults. |
+| Secret delivery | Secrets as mounted files (file name = property name), not environment variables | Matches the GKE Secret Manager add-on (CSI volume); file mounts do not leak through `kubectl describe`, crash dumps or child processes the way environment variables can. |
+| Management port | Actuator on port 8081, API on 8080 | Health, metrics and info are never reachable through the public load balancer, without needing path-based filtering. |
+| Probes | Liveness checks only the JVM's own state; readiness adds RabbitMQ (producer) and RabbitMQ + MongoDB (consumer) | Restarting pods does not fix a broker outage and causes restart storms; readiness instead sheds traffic and gates rollouts until a new pod can actually work. |
+| Metrics | Micrometer Prometheus endpoint | Request latency/error rates and listener metrics for dashboards and alerting (GKE Managed Prometheus scrapes it). |
+| API docs | Swagger/OpenAPI disabled by default, enabled for local runs | Public API documentation is an unnecessary attack-surface map in production. |
+
 ## Application stack
 
 | Decision | Choice | Rationale |

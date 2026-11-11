@@ -25,7 +25,7 @@ import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.rabbitmq.listener.simple.auto-startup=false")
 class BookingsIntegrationTest {
 
     @Autowired

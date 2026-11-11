@@ -1,11 +1,12 @@
 package pl.icwt.ecabs.dtos;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import lombok.Data;
-import org.hibernate.validator.constraints.Range;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Pattern;
-import javax.validation.constraints.Positive;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -34,7 +35,8 @@ public class BookingDTO {
 
     private BigDecimal price;
 
-    @Range(min = 1, max = 5, message = "Rating must me number between 1 and 5")
+    @Min(value = 1, message = "Rating must be a number between 1 and 5")
+    @Max(value = 5, message = "Rating must be a number between 1 and 5")
     private Integer rating;
 
     private List<TripWaypointDTO> tripWayPoints = new ArrayList<>();

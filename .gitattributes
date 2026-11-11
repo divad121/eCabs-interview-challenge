@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts must keep LF endings to run inside Linux containers and CI
+mvnw text eol=lf
+*.sh text eol=lf
+*.cmd text eol=crlf

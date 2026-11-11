@@ -7,7 +7,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import pl.icwt.ecabs.bookingconsumerservice.entities.Booking;
 import pl.icwt.ecabs.bookingconsumerservice.entities.TripWaypoint;
 import pl.icwt.ecabs.bookingconsumerservice.listeners.BookingsListener;
@@ -31,7 +31,7 @@ class BookingsIntegrationTest {
     @Autowired
     private BookingsListener bookingsListener;
 
-    @MockBean
+    @MockitoBean
     private BookingsRepository repository;
 
     @Test

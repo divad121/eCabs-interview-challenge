@@ -1,10 +1,9 @@
 package pl.icwt.ecabs.bookingconsumerservice.configs;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,9 +17,8 @@ import java.util.Map;
 public class AmqpConfig {
 
     @Bean
-    public MessageConverter jsonMessageConverter(){
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        return new Jackson2JsonMessageConverter(mapper);
+    public MessageConverter jsonMessageConverter() {
+        return new JacksonJsonMessageConverter("pl.icwt.ecabs.messages");
     }
 
     @Bean

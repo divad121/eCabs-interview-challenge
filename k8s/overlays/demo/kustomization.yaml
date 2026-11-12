@@ -1,8 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Short-lived demo environment in a personal project (values from terraform/demo.tfvars). Same shape as prod; only
-# the project, identities and hostname differ. CI deploys it when the repository variable K8S_OVERLAY is "demo".
+# Short-lived demo environment in a personal project (values from terraform/demo.tfvars). CI deploys it when the
+# repository variable K8S_OVERLAY is "demo". Besides project values, it is scaled down to fit a free-trial
+# project's quota (12 vCPUs, 250 GB SSD): one RabbitMQ node, small replica counts, no Friday pre-scaling.
 resources:
   - ../../base
 
@@ -38,3 +39,49 @@ patches:
       - op: replace
         path: /spec/hostnames/0
         value: api.ecabs.divad.dev
+  - target:
+      kind: RabbitmqCluster
+      name: rabbitmq
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/resources
+        value:
+          requests: {cpu: 500m, memory: 1536Mi}
+          limits: {cpu: "1", memory: 1536Mi}
+  - target:
+      kind: ScaledObject
+      name: booking-producer
+    patch: |
+      - op: remove
+        path: /spec/triggers/0
+      - op: replace
+        path: /spec/minReplicaCount
+        value: 2
+      - op: replace
+        path: /spec/maxReplicaCount
+        value: 4
+  - target:
+      kind: PodDisruptionBudget
+      name: booking-producer
+    patch: |
+      - op: replace
+        path: /spec/minAvailable
+        value: 1
+  - target:
+      kind: ScaledObject
+      name: booking-consumer
+    patch: |
+      - op: remove
+        path: /spec/triggers/0
+      - op: replace
+        path: /spec/minReplicaCount
+        value: 1
+      - op: replace
+        path: /spec/maxReplicaCount
+        value: 4
+      - op: replace
+        path: /spec/fallback/replicas
+        value: 2

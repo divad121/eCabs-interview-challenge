@@ -45,6 +45,9 @@ spec:
       terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
+        # Distroless's "nonroot" user; the kubelet can only verify runAsNonRoot against a numeric ID
+        runAsUser: 65532
+        runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       topologySpreadConstraints:

@@ -9,6 +9,7 @@ A booking API (`booking-producer-service`) accepts ride bookings and publishes e
 > Gateway with Cloud Armor, KEDA scaling) instead of stopping at a Terraform outline. The brief's core is the
 > one-command local run, the Dockerfiles, `terraform/`, CI and the documents below; every choice beyond it is
 > explained in DECISIONS.md, and what I deliberately left out is listed there under "What I would do with another day".
+> I also deployed it to a personal GCP project to prove it works beyond `plan` (see [Live demo on GCP](#live-demo-on-gcp)).
 
 | Document | Contents |
 |---|---|
@@ -94,6 +95,29 @@ it, temporarily add `ports: ["15672:15672"]` to the `rabbitmq` service.
 docker compose down        # keep data
 docker compose down -v     # also delete RabbitMQ and MongoDB volumes
 ```
+
+## Live demo on GCP
+
+The same Terraform and CI pipeline are deployed to a personal GCP project, at **`https://api.ecabs.divad.dev`**
+(`divad.dev` is a domain I keep for dev/test projects). It is temporary and will be torn down after the review, so
+the URL may no longer answer.
+
+```bash
+curl -i -X POST https://api.ecabs.divad.dev/bookings -H 'Content-Type: application/json' -d '{
+  "passengerName": "Jane Doe", "passengerContactNumber": "+35699740158",
+  "pickupTime": "2026-11-13T23:05:00+01:00", "asap": true, "noOfPassengers": 2, "price": 18.50,
+  "tripWayPoints": [{"lastStop": true, "locality": "Sliema", "lat": 35.912, "lng": 14.504}]}'
+```
+
+It runs the production design (Atlas M10 over Private Service Connect, Workload Identity, the Gateway with a
+Google-managed certificate and Cloud Armor, keyless deploys from GitHub), with the demo overlay
+([`k8s/overlays/demo`](k8s/overlays/demo/kustomization.yaml)) scaled down to fit a free-trial project's quota of
+12 vCPUs: one RabbitMQ node instead of three, fewer replicas, no Friday pre-scaling.
+
+Applying it for real caught two things `terraform plan` and manifest validation could not: the pods were rejected
+because the distroless image names its user (`nonroot`) instead of giving a numeric ID that the kubelet can check
+against `runAsNonRoot` (fixed in the base manifests with UID 65532), and the production shape exceeds a trial
+project's CPU and SSD quotas.
 
 ## Configuration
 

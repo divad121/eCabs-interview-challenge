@@ -3,6 +3,13 @@
 A booking API (`booking-producer-service`) accepts ride bookings and publishes events to RabbitMQ; a worker
 (`booking-consumer-service`) consumes them and persists bookings to MongoDB. Prepared to run on Google Cloud (GKE).
 
+> **A note on scope.** The brief expects 4–6 hours and warns against gold-plating, and this submission goes further
+> on purpose. eCabs runs on Google Cloud, which is new to me, so I used the challenge to learn it properly: next to
+> the local stack, I built the production setup in full (GKE Autopilot, Workload Identity, Secret Manager, the
+> Gateway with Cloud Armor, KEDA scaling) instead of stopping at a Terraform outline. The brief's core is the
+> one-command local run, the Dockerfiles, `terraform/`, CI and the documents below; every choice beyond it is
+> explained in DECISIONS.md, and what I deliberately left out is listed there under "What I would do with another day".
+
 | Document | Contents |
 |---|---|
 | [FIXES.md](FIXES.md) | Every issue found in the original code, ranked by production risk, with its status |

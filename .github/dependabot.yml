@@ -24,6 +24,10 @@ updates:
     groups:
       base-images:
         patterns: ["*"]
+    # The build JDK must match the Java 21 runtime image and CI; a new Java major is a deliberate, project-wide change.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker-compose
     directory: /

@@ -2,7 +2,7 @@
 # Build from the repository root (the service depends on the booking-contract module):
 #   docker build -f booking-producer-service/Dockerfile -t booking-producer-service .
 
-FROM eclipse-temurin:25-jdk-noble@sha256:95e350ad1eb738f943e141640f7e3d797e483359a3b33c3864255bfd1ad71f8a AS build
+FROM eclipse-temurin:21-jdk-noble@sha256:06c1f157dacf6b68198bd9a4186dd4c34ef24e65d7bbbe2a0cf8e62571ad38c9 AS build
 WORKDIR /workspace
 
 COPY mvnw pom.xml ./

@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Short-lived demo environment in a personal project (values from terraform/demo.tfvars). Same shape as prod; only
+# the project, identities and hostname differ. CI deploys it when the repository variable K8S_OVERLAY is "demo".
+resources:
+  - ../../base
+
+images:
+  - name: booking-producer
+    newName: europe-west1-docker.pkg.dev/ecabs-challenge-david/ecabs/booking-producer
+    newTag: set-by-ci
+  - name: booking-consumer
+    newName: europe-west1-docker.pkg.dev/ecabs-challenge-david/ecabs/booking-consumer
+    newTag: set-by-ci
+
+patches:
+  - target:
+      kind: ServiceAccount
+      name: booking-consumer
+    patch: |
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: booking-consumer@ecabs-challenge-david.iam.gserviceaccount.com
+  - target:
+      kind: SecretProviderClass
+      name: booking-consumer-mongodb
+    patch: |
+      - op: replace
+        path: /spec/parameters/secrets
+        value: |
+          - resourceName: "projects/ecabs-challenge-david/secrets/booking-consumer-mongodb-uri/versions/latest"
+            path: "uri"
+  - target:
+      kind: HTTPRoute
+      name: booking-api
+    patch: |
+      - op: replace
+        path: /spec/hostnames/0
+        value: api.ecabs.divad.dev

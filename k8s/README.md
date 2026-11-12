@@ -8,6 +8,7 @@ Google service account and its MongoDB secret.
 platform/          cluster add-ons (cert-manager, RabbitMQ operators, KEDA) at pinned versions
 base/              the application: RabbitMQ cluster, topology and users, both services, Gateway, policies
 overlays/prod/     production values (images, project, hostname)
+overlays/demo/     the same for a short-lived demo in a personal project
 validate.sh        offline validation of every overlay
 ```
 

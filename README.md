@@ -151,6 +151,16 @@ CI authenticates to Google with short-lived Workload Identity Federation tokens,
 repository's `main` branch; no service-account key exists. [Dependabot](.github/dependabot.yml) opens weekly
 update pull requests for Maven, base images, Compose images, GitHub Actions and Terraform providers.
 
+**About the first red run.** The pipeline's first run
+([43095061621](https://github.com/divad121/eCabs-interview-challenge/actions/runs/43095061621), 11 November) failed
+in Build and test. The log showed the MongoDB Testcontainer exiting within a second of starting, so the consumer's
+database tests failed before reaching any application code. The same evening GitHub had an
+[incident affecting Actions](https://www.githubstatus.com/incidents/dvy0t3mvh1lg) (20:48–21:21 UTC), which explains
+the rest of what the run did: jobs stuck in the queue, the secret scan cancelled and the logs unavailable for a
+while. The commit passed locally on Windows and in a Linux container, and re-running the failed jobs passed with no
+code change. The logs don't say why `mongod` exited; if it happened again, the first step would be pinning the test
+image to an exact patch version instead of `mongo:8.0`, which Docker Hub re-tags whenever a new build is published.
+
 ## Modules
 
 * `booking-producer-service` – REST API, request validation, publishes booking events to RabbitMQ.

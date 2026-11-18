@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     && cp booking-consumer-service/target/booking-consumer-service-*.jar app.jar \
     && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
 
-FROM gcr.io/distroless/java21-debian13:nonroot@sha256:d978eefd303c59c42f382aef811a0e41f2c68a6e5c319a23769cd3d1d5bf8e3c
+FROM gcr.io/distroless/java21-debian13:nonroot@sha256:16641166545e1b07b10ba0d51118000620980e51a38359c822c7003d5b3742de
 
 LABEL org.opencontainers.image.title="booking-consumer-service" \
       org.opencontainers.image.description="Worker consuming booking events from RabbitMQ and persisting bookings"
